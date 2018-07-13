@@ -42,11 +42,21 @@ type Row struct {
 }
 
 func serializeRow(source *Row, destination *Row) {
-	copy([]*Row{destination}, []*Row{source})
+	copy([]uint32{destination.Id}, []uint32{source.Id})
+	copy([][32]byte{destination.Username}, [][32]byte{source.Username})
+	copy([][255]byte{destination.Email}, [][255]byte{source.Email})
+	// memcpy(destination + ID_OFFSET, &(source->id), ID_SIZE);
+	// memcpy(destination + USERNAME_OFFSET, &(source->username), USERNAME_SIZE);
+	// memcpy(destination + EMAIL_OFFSET, &(source->email), EMAIL_SIZE);
 }
 
 func deserializeRow(source *Row, destination *Row) {
-	copy([]*Row{destination}, []*Row{source})
+	copy([]uint32{destination.Id}, []uint32{source.Id})
+	copy([][32]byte{destination.Username}, [][32]byte{source.Username})
+	copy([][255]byte{destination.Email}, [][255]byte{source.Email})
+	// memcpy(&(destination->id), source + ID_OFFSET, ID_SIZE);
+	// memcpy(&(destination->username), source + USERNAME_OFFSET, USERNAME_SIZE);
+	// memcpy(&(destination->email), source + EMAIL_OFFSET, EMAIL_SIZE);
 }
 
 func rowSlot(table *Table, rowNum int) *Row {
