@@ -9,13 +9,55 @@ import (
 )
 
 const (
-	Unrecognized = "unrecognized"
-	Insert       = "insert"
-	Success      = "success"
-	Select       = "select"
+	Unrecognized       = "unrecognized"
+	Insert             = "insert"
+	Success            = "success"
+	Select             = "select"
+	Error              = "error"
+	ColumnUsernameSize = 32
+	ColumnEmailSize    = 255
+	TableFull          = "table full"
+	SyntaxError        = "syntax error"
+	RowSize            = 32 + ColumnUsernameSize + ColumnEmailSize
+	PageSize           = 4096
+	TableMaxPages      = 100
+	RowsPerPage        = PageSize / RowSize
+	TableMaxRows       = RowsPerPage * TableMaxPages
 )
 
-type Statement struct{ Type string }
+type Table struct {
+	Pages   [TableMaxPages]*Row
+	NumRows int
+}
+
+type Statement struct {
+	Type        string
+	RowToInsert Row
+}
+
+type Row struct {
+	Id       uint32
+	Username [ColumnUsernameSize]byte
+	Email    [ColumnEmailSize]byte
+}
+
+func serializeRow(source *Row, destination *Row) {
+	copy([]*Row{destination}, []*Row{source})
+}
+
+func deserializeRow(source *Row, destination *Row) {
+	copy([]*Row{destination}, []*Row{source})
+}
+
+func rowSlot(table *Table, rowNum int) *Row {
+	pageNum := rowNum / RowsPerPage
+	page := table.Pages[pageNum]
+	return page
+}
+
+func printRow(row *Row) {
+	fmt.Printf("(%d, %s, %s)\n", row.Id, row.Username, row.Email)
+}
 
 func doMetaCommand(input string) string {
 	var output string
@@ -27,19 +69,45 @@ func doMetaCommand(input string) string {
 	return output
 }
 
-func executeStatement(statement *Statement) {
+func executeInsert(statement *Statement, table *Table) string {
+	if table.NumRows > TableMaxRows {
+		return TableFull
+	}
+	rowToInsert := statement.RowToInsert
+	page := rowSlot(table, table.NumRows)
+	serializeRow(&rowToInsert, page)
+	table.NumRows++
+
+	return Success
+}
+
+func executeSelect(statement *Statement, table *Table) string {
+	var row Row
+	for i := 0; i < table.NumRows; i++ {
+		page := rowSlot(table, i)
+		deserializeRow(page, &row)
+		printRow(&row)
+	}
+	return Success
+}
+
+func executeStatement(statement *Statement, table *Table) string {
 	switch statement.Type {
 	case Insert:
-		fmt.Println("This is where we would do an insert.")
-		break
+		return executeInsert(statement, table)
 	case Select:
-		fmt.Println("This is where we would do a select.")
+		return executeSelect(statement, table)
 	}
+	return SyntaxError
 }
 
 func prepareStatement(input string, statement *Statement) string {
 	if input[:6] == Insert {
 		statement.Type = Insert
+		_, err := fmt.Sscanf(input, "insert %d %s %s", statement.RowToInsert.Id, statement.RowToInsert.Username, statement.RowToInsert.Email)
+		if err != nil {
+			return Error
+		}
 		return Success
 	}
 
@@ -52,6 +120,7 @@ func prepareStatement(input string, statement *Statement) string {
 }
 
 func main() {
+	var table Table
 	for {
 		consoleReader := bufio.NewReader(os.Stdin)
 		fmt.Print("> ")
@@ -73,13 +142,22 @@ func main() {
 		switch prepareStatement(input, &statement) {
 		case Success:
 			break
+		case SyntaxError:
+			fmt.Println("Syntax error. Could not parse statement.")
+			continue
 		case Unrecognized:
 			fmt.Printf("Unrecognized keyword at start of '%s'.\n", input)
 			continue
 		}
 
-		executeStatement(&statement)
-		fmt.Println("Executed.")
+		switch executeStatement(&statement, &table) {
+		case Success:
+			fmt.Println("Executed.")
+			break
+		case TableFull:
+			fmt.Println("Error: Table full.")
+			break
+		}
 	}
 
 }
